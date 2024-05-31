@@ -1,0 +1,9 @@
+{
+  "env": {
+    "DB_USER": "vladyslav",
+    "DB_PASSWORD": "PzCgtOlN1h0QKsph",
+    "DB_NAME": "space",
+    "JWT_KEY": "my-super-secret-secret-jwt-key",
+    "JWT_EXPIRATION": "1h"
+  }
+}
