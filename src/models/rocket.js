@@ -2,6 +2,14 @@ const { Schema, model } = require('mongoose');
 
 const rocketSchema = new Schema(
   {
+    address: {
+      type: String,
+      require: true,
+    },
+    location: {
+      lat: { type: Number, require: true },
+      lng: { type: Number, require: true },
+    },
     title: {
       type: String,
       require: true,

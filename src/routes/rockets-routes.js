@@ -1,8 +1,8 @@
 const { Router } = require('express');
 
-const { createRocket, getRocket, editRocket } = require('../controllers/rockets-controllers');
+const { createRocket, getRocket, editRocket, deleteRocket } = require('../controllers/rockets-controllers');
 const checkAuth = require('../middleware/check-auth');
-const { checkRocket } = require('../middleware/input-validation');
+const { checkRocketUpdate, checkRocketCreate } = require('../middleware/input-validation');
 const { imageUpload } = require('../middleware/image-upload');
 
 const router = Router();
@@ -11,9 +11,12 @@ const router = Router();
 router.get('/:id', getRocket);
 
 // Edit rocket route
-router.patch('/:id', checkAuth, imageUpload('rockets'), checkRocket(), editRocket);
+router.patch('/:id', checkAuth, imageUpload('rockets'), checkRocketUpdate(), editRocket);
+
+// Delete rocket route
+router.delete('/:id', checkAuth, deleteRocket);
 
 // Create new rocket route
-router.post('/', checkAuth, imageUpload('rockets'), checkRocket(), createRocket);
+router.post('/', checkAuth, imageUpload('rockets'), checkRocketCreate(), createRocket);
 
 module.exports = router;

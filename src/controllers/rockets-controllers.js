@@ -3,42 +3,55 @@ const fs = require('fs');
 const { startSession } = require('mongoose');
 const { validationResult } = require('express-validator');
 
-const { checkImage, checkInputs } = require('../utils/helpers');
-
+const { validateImageFile, validateInputs, getMapCoordinates } = require('../utils/helpers');
 const HttpError = require('../models/http-error');
 const User = require('../models/user');
 const Rocket = require('../models/rocket');
 
 const createRocket = async (req, res, next) => {
-  const { title, description, creator, shared } = req.body;
+  const { address, title, description, creator, shared } = req.body;
   const errors = validationResult(req);
 
-  checkInputs(errors, next);
-  checkImage(req.file, next);
+  const sharedValue = shared ? shared === 'true' : shared;
 
-  let user;
+  validateInputs(errors, next);
+  validateImageFile(req.file, next);
+
+  let user, coordinates;
 
   try {
     user = await User.findById(creator);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not create rocket'));
+  }
 
+  try {
     if (!user) {
       throw new HttpError('Could not find a user with provided id', 404);
     }
 
     if (user.id.toString() !== req.user.id) {
-      throw new HttpError('You are not allowed to create rocket', 401);
+      throw new HttpError('Not authorized', 401);
     }
   } catch (e) {
     return next(new HttpError(e.message, e.code, e.errors));
   }
 
+  try {
+    coordinates = await getMapCoordinates(address);
+  } catch (e) {
+    return next(new HttpError(e.message, e.code, e.errors));
+  }
+
   const rocket = new Rocket({
+    address,
+    location: coordinates,
     title,
     description,
-    image: req.file.path.replace(/\\/g, '/'),
+    image: req.file.path,
     creator,
     likes: [],
-    shared: shared === 'true',
+    shared: sharedValue,
   });
 
   try {
@@ -49,57 +62,44 @@ const createRocket = async (req, res, next) => {
     user.rockets.push(rocket);
     await user.save({ session });
     await session.commitTransaction();
-
-    res.status(201).json({
-      message: 'Rocket successfully created',
-      rocket: {
-        id: rocket.id,
-        title: rocket.title,
-        description: rocket.description,
-        likes: rocket.likes,
-        rating: rocket.likes.lenght,
-        image: rocket.image,
-        date: rocket.createdAt,
-        shared: rocket.shared,
-        creator: rocket.creator,
-      },
-    });
   } catch (e) {
-    return next(new HttpError('Creating rocket failed, please try again later'));
+    return next(new HttpError('Sorry, something went wrong, could not create rocket'));
   }
+
+  res.status(201).json({
+    message: 'Rocket successfully created',
+    rocket: {
+      ...rocket._doc,
+      id: rocket.id,
+      rating: rocket.likes.length,
+    },
+  });
 };
 
 const editRocket = async (req, res, next) => {
-  const { title, description, creator } = req.body;
+  const { title, description } = req.body;
   const { id: rocketId } = req.params;
   const { shared } = req.query;
 
-  if (!shared) {
+  const sharedValue = shared ? shared === 'true' : shared;
+
+  if (sharedValue === undefined) {
     const errors = validationResult(req);
 
-    checkInputs(errors, next);
-    checkImage(req.file, next);
+    validateInputs(errors, next);
+    validateImageFile(req.file, next);
   }
 
-  let rocket;
-
-  try {
-    const user = await User.findById(creator);
-
-    if (!user) {
-      throw new HttpError('Could not find a user with provided id', 404);
-    }
-
-    if (user.id.toString() !== req.user.id) {
-      throw new HttpError('You are not allowed to edit rocket', 401);
-    }
-  } catch (e) {
-    return next(new HttpError(e.message, e.code, e.errors));
-  }
+  let rocket, user;
+  let successMessage = 'Rocket successfully updated';
 
   try {
     rocket = await Rocket.findById(rocketId);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not update rocket'));
+  }
 
+  try {
     if (!rocket) {
       throw new HttpError('Could not find a rocket with provided id', 404);
     }
@@ -108,65 +108,135 @@ const editRocket = async (req, res, next) => {
   }
 
   try {
-    if (shared) {
-      rocket.shared = shared === 'true';
+    user = await User.findById(rocket.creator);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not update rocket'));
+  }
+
+  try {
+    if (!user) {
+      throw new HttpError('Could not find a user created the rocket', 404);
+    }
+
+    if (user.id.toString() !== req.user.id) {
+      throw new HttpError('Not authorized', 401);
+    }
+  } catch (e) {
+    return next(new HttpError(e.message, e.code, e.errors));
+  }
+
+  try {
+    if (sharedValue !== undefined) {
+      rocket.shared = sharedValue;
+      successMessage = sharedValue
+        ? 'You have successfully share the rocket'
+        : 'You have successfully unshare the rocket';
     } else {
       fs.unlink(rocket.image, () => {}); // remove old image
 
       rocket.title = title;
       rocket.description = description;
-      rocket.image = req.file.path.replace(/\\/g, '/');
+      rocket.image = req.file.path;
     }
 
     await rocket.save();
-
-    res.status(201).json({
-      message: 'Rocket successfully updated',
-      rocket: {
-        id: rocket.id,
-        title: rocket.title,
-        description: rocket.description,
-        likes: rocket.likes,
-        rating: rocket.likes.length,
-        image: rocket.image,
-        date: rocket.createdAt,
-        shared: rocket.shared,
-        creator: rocket.creator,
-      },
-    });
   } catch (e) {
-    return next(new HttpError(e.message, 500));
+    return next(new HttpError('Sorry, something went wrong, could not update rocket'));
   }
+
+  res.status(201).json({
+    message: successMessage,
+    rocket: {
+      ...rocket._doc,
+      id: rocket.id,
+      rating: rocket.likes.length,
+    },
+  });
 };
 
 const getRocket = async (req, res, next) => {
   const { id } = req.params;
 
-  try {
-    const rocket = await Rocket.findById(id);
+  let rocket;
 
+  try {
+    rocket = await Rocket.findById(id);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not load rocket'));
+  }
+
+  try {
     if (!rocket) {
       throw new HttpError('Could not find a rocket with provided id', 404);
     }
-
-    res.status(200).json({
-      rocket: {
-        id: rocket.id,
-        title: rocket.title,
-        description: rocket.description,
-        likes: rocket.likes,
-        image: rocket.image,
-        rating: rocket.likes.length,
-        date: rocket.createdAt,
-        shared: rocket.shared,
-        creator: rocket.creator,
-      },
-    });
   } catch (e) {
     return next(new HttpError(e.message, e.code, e.errors));
   }
+
+  res.status(200).json({
+    rocket: {
+      ...rocket._doc,
+      id: rocket.id,
+      rating: rocket.likes.length,
+    },
+  });
+};
+
+const deleteRocket = async (req, res, next) => {
+  const { id: rocketId } = req.params;
+
+  let rocket, user;
+
+  try {
+    rocket = await Rocket.findById(rocketId);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not delete the rocket'));
+  }
+
+  try {
+    if (!rocket) {
+      throw new HttpError('Could not find a user created the rocket', 404);
+    }
+  } catch (e) {
+    return next(new HttpError(e.message, e.code));
+  }
+
+  try {
+    user = await User.findById(rocket.creator);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not delete the rocket'));
+  }
+
+  try {
+    if (!user) {
+      throw new HttpError('Could not find a user created the rocket', 404);
+    }
+
+    if (user.id.toString() !== req.user.id) {
+      throw new HttpError('Not authorized', 401);
+    }
+  } catch (e) {
+    return next(new HttpError(e.message, e.code));
+  }
+
+  try {
+    const session = await startSession();
+
+    session.startTransaction();
+    await rocket.deleteOne({ session });
+    user.rockets.pull(rocket);
+    await user.save({ session });
+    await session.commitTransaction();
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not delete the rocket'));
+  }
+
+  res.status(200).json({
+    message: 'Rocket successfully deleted',
+  });
 };
 
 module.exports.createRocket = createRocket;
 module.exports.editRocket = editRocket;
 module.exports.getRocket = getRocket;
+module.exports.deleteRocket = deleteRocket;

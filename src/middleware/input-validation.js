@@ -10,7 +10,9 @@ const checkUserSignup = () => {
     .not()
     .isEmpty()
     .isLength({ min: 3 });
+
   const email = body('email', 'Email entered incorrectly').trim().not().isEmpty().normalizeEmail().isEmail();
+
   const password = body('password', 'Password must not be empty and contain at least 6 characters')
     .trim()
     .not()
@@ -34,12 +36,13 @@ const checkUserUpdate = () => {
   return [name];
 };
 
-const checkRocket = () => {
+const checkRocketUpdate = () => {
   const title = body('title', 'Title must not be empty and contain at least 3 characters')
     .trim()
     .not()
     .isEmpty()
     .isLength({ min: 3 });
+
   const description = body(
     'description',
     'Description must not be empty and contain more than 10 and less than 200 characters'
@@ -52,6 +55,32 @@ const checkRocket = () => {
   return [title, description];
 };
 
+const checkRocketCreate = () => {
+  const address = body('address', 'Address must not be empty and contain at least 5 characters')
+    .trim()
+    .not()
+    .isEmpty()
+    .isLength({ min: 5 });
+
+  const title = body('title', 'Title must not be empty and contain at least 3 characters')
+    .trim()
+    .not()
+    .isEmpty()
+    .isLength({ min: 3 });
+
+  const description = body(
+    'description',
+    'Description must not be empty and contain more than 10 and less than 200 characters'
+  )
+    .trim()
+    .not()
+    .isEmpty()
+    .isLength({ min: 3, max: 200 });
+
+  return [address, title, description];
+};
+
 module.exports.checkUserSignup = checkUserSignup;
 module.exports.checkUserUpdate = checkUserUpdate;
-module.exports.checkRocket = checkRocket;
+module.exports.checkRocketUpdate = checkRocketUpdate;
+module.exports.checkRocketCreate = checkRocketCreate;

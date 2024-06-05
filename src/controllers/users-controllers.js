@@ -8,7 +8,7 @@ const { hash, compare } = require('bcryptjs');
 const { sign } = require('jsonwebtoken');
 
 const HttpError = require('../models/http-error');
-const { convertHoursToMilliseconds, checkImage, checkInputs } = require('../utils/helpers');
+const { convertHoursToMilliseconds, validateImageFile, validateInputs } = require('../utils/helpers');
 
 const User = require('../models/user');
 const Rocket = require('../models/rocket');
@@ -17,59 +17,79 @@ const userSignup = async (req, res, next) => {
   const { name, email, password } = req.body;
   const errors = validationResult(req);
 
-  checkInputs(errors, next);
-  checkImage(req.file);
+  validateInputs(errors, next);
+  validateImageFile(req.file);
+
+  let user, createdUser, token;
 
   try {
-    const user = await User.findOne({ email: email });
+    user = await User.findOne({ email: email });
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not sign up'));
+  }
 
+  try {
     if (user) {
       throw new HttpError('User with provided email already exists, please login instead', 422, {
-        file: 'email',
+        field: 'email',
         message: 'Please use another email',
       });
     }
+  } catch (e) {
+    return next(new HttpError(e.message, e.code, e.errors));
+  }
 
+  try {
     const hashedPassword = await hash(password, 12);
-    const createdUser = new User({
+    createdUser = new User({
       name,
       email,
-      image: req.file.path.replace(/\\/g, '/'),
+      image: req.file.path,
       password: hashedPassword,
       rockets: [],
     });
 
     await createdUser.save();
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not sign up'));
+  }
 
-    const token = sign({ email: createdUser.email, userId: createdUser.id }, process.env.JWT_KEY, {
+  try {
+    token = sign({ email: createdUser.email, userId: createdUser.id }, process.env.JWT_KEY, {
       expiresIn: process.env.JWT_EXPIRATION,
     });
-
-    res.status(201).json({
-      message: `Hello ${createdUser.name}, now you are part of the space`,
-      token: token,
-      tokenExpiration: convertHoursToMilliseconds(process.env.JWT_EXPIRATION),
-      user: {
-        id: createdUser.id,
-        name: createdUser.name,
-        image: createdUser.image,
-      },
-    });
   } catch (e) {
-    return next(new HttpError(e.message, e.code));
+    return next(new HttpError('Sorry, something went wrong, could not sign up'));
   }
+
+  res.status(201).json({
+    message: `Hello ${createdUser.name}, now you are part of the space`,
+    token,
+    tokenExpiration: convertHoursToMilliseconds(process.env.JWT_EXPIRATION),
+    user: {
+      id: createdUser.id,
+      name: createdUser.name,
+      image: createdUser.image,
+    },
+  });
 };
 
 const userSignin = async (req, res, next) => {
   const { email, password } = req.body;
 
-  try {
-    const user = await User.findOne({ email: email });
+  let user, token;
 
+  try {
+    user = await User.findOne({ email: email });
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not sign in'));
+  }
+
+  try {
     if (!user) {
-      throw new HttpError('Couldn’t find a user with provided email', 401, {
+      throw new HttpError('Could not find a user with provided email', 401, {
         field: 'email',
-        message: 'Please use your existing email',
+        message: 'Please use existing email',
       });
     }
 
@@ -81,28 +101,32 @@ const userSignin = async (req, res, next) => {
         message: 'Please enter the correct password',
       });
     }
-
-    const token = sign({ email: user.email, userId: user.id }, process.env.JWT_KEY, {
-      expiresIn: process.env.JWT_EXPIRATION,
-    });
-
-    res.status(200).json({
-      message: `Hello ${user.name}, glad to see you again`,
-      token: token,
-      tokenExpiration: convertHoursToMilliseconds(process.env.JWT_EXPIRATION),
-      user: {
-        id: user.id,
-        name: user.name,
-        image: user.image,
-      },
-    });
   } catch (e) {
     return next(new HttpError(e.message, e.code, e.errors));
   }
+
+  try {
+    token = sign({ email: user.email, userId: user.id }, process.env.JWT_KEY, {
+      expiresIn: process.env.JWT_EXPIRATION,
+    });
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not sign in'));
+  }
+
+  res.status(200).json({
+    message: `Hello ${user.name}, glad to see you again`,
+    token: token,
+    tokenExpiration: convertHoursToMilliseconds(process.env.JWT_EXPIRATION),
+    user: {
+      id: user.id,
+      name: user.name,
+      image: user.image,
+    },
+  });
 };
 
 const getUserProfile = async (req, res, next) => {
-  const { id } = req.params;
+  const { id: userId } = req.params;
   const { filter, search, page } = req.query;
 
   const currentPage = +page || 1;
@@ -110,17 +134,19 @@ const getUserProfile = async (req, res, next) => {
   const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
   const defaultFilterStagesMap = {
-    all: { $match: { creator: new ObjectId(id) } },
-    favorites: { $match: { creator: new ObjectId(id), likes: id } },
-    shared: { $match: { creator: new ObjectId(id), shared: true } },
+    all: { $match: { creator: new ObjectId(userId) } },
+    favorites: { $match: { creator: new ObjectId(userId), likes: userId } },
+    shared: { $match: { creator: new ObjectId(userId), shared: true } },
   };
 
   const filterStagesMap = { ...defaultFilterStagesMap };
 
   if (search) {
-    filterStagesMap.all = { $match: { creator: new ObjectId(id), $text: { $search: search } } };
-    filterStagesMap.favorites = { $match: { creator: new ObjectId(id), likes: id, $text: { $search: search } } };
-    filterStagesMap.shared = { $match: { creator: new ObjectId(id), shared: true, $text: { $search: search } } };
+    filterStagesMap.all = { $match: { creator: new ObjectId(userId), $text: { $search: search } } };
+    filterStagesMap.favorites = {
+      $match: { creator: new ObjectId(userId), likes: userId, $text: { $search: search } },
+    };
+    filterStagesMap.shared = { $match: { creator: new ObjectId(userId), shared: true, $text: { $search: search } } };
   }
 
   const filterStage = filter ? filterStagesMap[filter] : filterStagesMap.all;
@@ -130,11 +156,9 @@ const getUserProfile = async (req, res, next) => {
       id: '$_id',
       title: 1,
       image: 1,
-      shared: 1,
       description: 1,
       likes: 1,
-      date: '$createdAt',
-      creator: 1,
+      createdAt: 1,
       rating: { $size: '$likes' },
     },
   };
@@ -144,9 +168,15 @@ const getUserProfile = async (req, res, next) => {
 
   const pipeline = [filterStage, projectStage, sortStage, skipStage, limitStage];
 
-  try {
-    const user = await User.findById(id);
+  let user, rockets, amount, amountFavorites, amountShared, currentAmount, totalPages, hasNextPage;
 
+  try {
+    user = await User.findById(userId);
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not load user profile'));
+  }
+
+  try {
     if (!user) {
       throw new HttpError('Could not find rockets for provided user', 404);
     }
@@ -159,50 +189,54 @@ const getUserProfile = async (req, res, next) => {
   }
 
   try {
-    const [amount] = await Rocket.aggregate([defaultFilterStagesMap.all]).count('rockets');
-    const [amountFavorites] = await Rocket.aggregate([defaultFilterStagesMap.favorites]).count('rockets');
-    const [amountShared] = await Rocket.aggregate([defaultFilterStagesMap.shared]).count('rockets');
-    const [currentAmount] = await Rocket.aggregate([filterStage]).count('rockets');
+    [amount] = await Rocket.aggregate([defaultFilterStagesMap.all]).count('rockets');
+    [amountFavorites] = await Rocket.aggregate([defaultFilterStagesMap.favorites]).count('rockets');
+    [amountShared] = await Rocket.aggregate([defaultFilterStagesMap.shared]).count('rockets');
+    [currentAmount] = await Rocket.aggregate([filterStage]).count('rockets');
 
-    const rockets = await Rocket.aggregate(pipeline);
+    rockets = await Rocket.aggregate(pipeline);
 
-    const totalPages = currentAmount?.rockets ? Math.ceil(currentAmount.rockets / elementsPerPage) : 1;
-    const hasNextPage = currentPage < totalPages;
-
-    res.status(200).json({
-      rockets,
-      currentPage,
-      totalPages,
-      hasNextPage,
-      amount: amount?.rockets || 0,
-      amountFavorites: amountFavorites?.rockets || 0,
-      amountShared: amountShared?.rockets || 0,
-      currentAmount: currentAmount?.rockets || 0,
-    });
+    totalPages = currentAmount?.rockets ? Math.ceil(currentAmount.rockets / elementsPerPage) : 1;
+    hasNextPage = currentPage < totalPages;
   } catch (e) {
-    return next(new HttpError("Sorry, something went wrong. Can't load profile"));
+    return next(new HttpError('Sorry, something went wrong, could not load user profile'));
   }
+
+  res.status(200).json({
+    rockets,
+    currentPage,
+    totalPages,
+    hasNextPage,
+    amount: amount?.rockets || 0,
+    amountFavorites: amountFavorites?.rockets || 0,
+    amountShared: amountShared?.rockets || 0,
+    currentAmount: currentAmount?.rockets || 0,
+  });
 };
 
 const userUpdateProfile = async (req, res, next) => {
-  const { id } = req.params;
   const { name } = req.body;
+  const { id: userId } = req.params;
   const errors = validationResult(req);
 
-  checkInputs(errors, next);
-  checkImage(req.file);
+  validateInputs(errors, next);
+  validateImageFile(req.file);
 
   let user;
 
   try {
-    user = await User.findById(id);
+    user = await User.findById(userId);
+  } catch (e) {
+    return next(new HttpError('Something went wrong, could not update user profile'));
+  }
 
+  try {
     if (!user) {
-      throw new HttpError('Sorry, something went wrong, please try again later', 500);
+      throw new HttpError('Could not find a user with provided id', 404);
     }
 
     if (user.id.toString() !== req.user.id) {
-      throw new HttpError('You are not allowed to edit this profile', 401);
+      throw new HttpError('Not authorized', 401);
     }
   } catch (e) {
     return next(new HttpError(e.message, e.code, e.errors));
@@ -212,21 +246,21 @@ const userUpdateProfile = async (req, res, next) => {
     fs.unlink(user.image, () => {}); // remove old image
 
     user.name = name;
-    user.image = req.file.path.replace(/\\/g, '/');
+    user.image = req.file.path;
 
     await user.save();
-
-    res.status(201).json({
-      message: 'Profile successfully updated',
-      user: {
-        id: user.id,
-        name: user.name,
-        image: user.image,
-      },
-    });
   } catch (e) {
-    return next(new HttpError('Updating profile failed, please try again later'));
+    return next(new HttpError('Something went wrong, could not update user profile'));
   }
+
+  res.status(201).json({
+    message: 'Profile successfully updated',
+    user: {
+      id: user.id,
+      name: user.name,
+      image: user.image,
+    },
+  });
 };
 
 module.exports.userSignup = userSignup;
