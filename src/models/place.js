@@ -1,6 +1,6 @@
 const { Schema, model } = require('mongoose');
 
-const rocketSchema = new Schema(
+const placeSchema = new Schema(
   {
     address: {
       type: String,
@@ -43,6 +43,6 @@ const rocketSchema = new Schema(
   }
 );
 
-rocketSchema.index({ title: 'text' });
+placeSchema.index({ title: 'text' });
 
-module.exports = model('Rocket', rocketSchema);
+module.exports = model('Place', placeSchema);

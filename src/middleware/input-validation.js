@@ -36,7 +36,7 @@ const checkUserUpdate = () => {
   return [name];
 };
 
-const checkRocketUpdate = () => {
+const checkPlaceUpdate = () => {
   const title = body('title', 'Title must not be empty and contain at least 3 characters')
     .trim()
     .not()
@@ -55,7 +55,7 @@ const checkRocketUpdate = () => {
   return [title, description];
 };
 
-const checkRocketCreate = () => {
+const checkPlaceCreate = () => {
   const address = body('address', 'Address must not be empty and contain at least 5 characters')
     .trim()
     .not()
@@ -82,5 +82,5 @@ const checkRocketCreate = () => {
 
 module.exports.checkUserSignup = checkUserSignup;
 module.exports.checkUserUpdate = checkUserUpdate;
-module.exports.checkRocketUpdate = checkRocketUpdate;
-module.exports.checkRocketCreate = checkRocketCreate;
+module.exports.checkPlaceUpdate = checkPlaceUpdate;
+module.exports.checkPlaceCreate = checkPlaceCreate;

@@ -11,7 +11,7 @@ const HttpError = require('../models/http-error');
 const { convertHoursToMilliseconds, validateImageFile, validateInputs } = require('../utils/helpers');
 
 const User = require('../models/user');
-const Rocket = require('../models/rocket');
+const Place = require('../models/place');
 
 const userSignup = async (req, res, next) => {
   const { name, email, password } = req.body;
@@ -46,7 +46,7 @@ const userSignup = async (req, res, next) => {
       email,
       image: req.file.path,
       password: hashedPassword,
-      rockets: [],
+      places: [],
     });
 
     await createdUser.save();
@@ -157,9 +157,7 @@ const getUserProfile = async (req, res, next) => {
       title: 1,
       image: 1,
       description: 1,
-      likes: 1,
-      createdAt: 1,
-      rating: { $size: '$likes' },
+      favorite: { $in: ['$likes', [userId]] },
     },
   };
   const sortStage = { $sort: { date: -1 } };
@@ -168,7 +166,7 @@ const getUserProfile = async (req, res, next) => {
 
   const pipeline = [filterStage, projectStage, sortStage, skipStage, limitStage];
 
-  let user, rockets, amount, amountFavorites, amountShared, currentAmount, totalPages, hasNextPage;
+  let user, places, placesAmount, favoritesAmount, sharedAmount, currentPlacesAmount, totalPages, hasNextPage;
 
   try {
     user = await User.findById(userId);
@@ -178,7 +176,7 @@ const getUserProfile = async (req, res, next) => {
 
   try {
     if (!user) {
-      throw new HttpError('Could not find rockets for provided user', 404);
+      throw new HttpError('Could not find places for provided user', 404);
     }
 
     if (user.id.toString() !== req.user.id) {
@@ -189,28 +187,28 @@ const getUserProfile = async (req, res, next) => {
   }
 
   try {
-    [amount] = await Rocket.aggregate([defaultFilterStagesMap.all]).count('rockets');
-    [amountFavorites] = await Rocket.aggregate([defaultFilterStagesMap.favorites]).count('rockets');
-    [amountShared] = await Rocket.aggregate([defaultFilterStagesMap.shared]).count('rockets');
-    [currentAmount] = await Rocket.aggregate([filterStage]).count('rockets');
+    [placesAmount] = await Place.aggregate([defaultFilterStagesMap.all]).count('places');
+    [favoritesAmount] = await Place.aggregate([defaultFilterStagesMap.favorites]).count('places');
+    [sharedAmount] = await Place.aggregate([defaultFilterStagesMap.shared]).count('places');
+    [currentPlacesAmount] = await Place.aggregate([filterStage]).count('places');
 
-    rockets = await Rocket.aggregate(pipeline);
-
-    totalPages = currentAmount?.rockets ? Math.ceil(currentAmount.rockets / elementsPerPage) : 1;
-    hasNextPage = currentPage < totalPages;
+    places = await Place.aggregate(pipeline);
   } catch (e) {
-    return next(new HttpError('Sorry, something went wrong, could not load user profile'));
+    return next(new HttpError(e.message));
   }
 
+  totalPages = currentPlacesAmount?.places ? Math.ceil(currentPlacesAmount.places / elementsPerPage) : 1;
+  hasNextPage = currentPage < totalPages;
+
   res.status(200).json({
-    rockets,
+    places,
     currentPage,
     totalPages,
     hasNextPage,
-    amount: amount?.rockets || 0,
-    amountFavorites: amountFavorites?.rockets || 0,
-    amountShared: amountShared?.rockets || 0,
-    currentAmount: currentAmount?.rockets || 0,
+    placesAmount: placesAmount?.places || 0,
+    favoritesAmount: favoritesAmount?.places || 0,
+    sharedAmount: sharedAmount?.places || 0,
+    currentPlacesAmount: currentPlacesAmount?.places || 0,
   });
 };
 

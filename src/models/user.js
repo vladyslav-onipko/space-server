@@ -20,10 +20,10 @@ const userSchema = new Schema({
     require: true,
     minlength: 6,
   },
-  rockets: [
+  places: [
     {
       type: Schema.Types.ObjectId,
-      ref: 'Rocket',
+      ref: 'Place',
     },
   ],
 });
