@@ -160,7 +160,8 @@ const editPlace = async (req, res, next) => {
 const getPlace = async (req, res, next) => {
   const { id } = req.params;
 
-  let place, userScoreData;
+  let place, topUserPlaces, userScoreData;
+  const limitTopPlaces = 3;
 
   try {
     [place] = await Place.aggregate([
@@ -202,15 +203,23 @@ const getPlace = async (req, res, next) => {
   try {
     [userScoreData] = await Place.aggregate([
       { $match: { creator: place.creator.id } },
-      { $group: { _id: null, totalLikes: { $sum: { size: '$likes' } }, totalPlaces: { $sum: 1 } } },
+      { $group: { _id: null, totalLikes: { $sum: { $size: '$likes' } }, totalPlaces: { $sum: 1 } } },
       { $project: { _id: 0, totalPlaces: 1, rating: { $divide: ['$totalLikes', '$totalPlaces'] } } },
     ]);
+
+    topUserPlaces = await Place.find(
+      { creator: place.creator.id, shared: true },
+      { _id: 0, id: '$_id', title: 1, image: 1 }
+    )
+      .sort({ likes: 1 })
+      .limit(limitTopPlaces);
   } catch (e) {
     return next(new HttpError('Sorry, something went wrong, could not load place'));
   }
 
   res.status(200).json({
     place,
+    topUserPlaces,
     userPlacesAmount: userScoreData.totalPlaces,
     userRating: userScoreData.rating,
   });
@@ -311,6 +320,7 @@ const deletePlace = async (req, res, next) => {
     user.places.pull(place);
     await user.save({ session });
     await session.commitTransaction();
+    fs.unlink(place.image, () => {});
   } catch (e) {
     return next(new HttpError('Sorry, something went wrong, could not delete the place'));
   }

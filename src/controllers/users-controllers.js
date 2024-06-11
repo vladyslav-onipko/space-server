@@ -1,8 +1,6 @@
 const fs = require('fs');
 
-const {
-  Types: { ObjectId },
-} = require('mongoose');
+const { Types } = require('mongoose');
 const { validationResult } = require('express-validator');
 const { hash, compare } = require('bcryptjs');
 const { sign } = require('jsonwebtoken');
@@ -133,20 +131,20 @@ const getUserProfile = async (req, res, next) => {
   const elementsPerPage = 3;
   const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
+  const userObjectId = new Types.ObjectId(userId);
+
   const defaultFilterStagesMap = {
-    all: { $match: { creator: new ObjectId(userId) } },
-    favorites: { $match: { creator: new ObjectId(userId), likes: userId } },
-    shared: { $match: { creator: new ObjectId(userId), shared: true } },
+    all: { $match: { creator: userObjectId } },
+    favorites: { $match: { creator: userObjectId, likes: userObjectId } },
+    shared: { $match: { creator: userObjectId, shared: true } },
   };
 
   const filterStagesMap = { ...defaultFilterStagesMap };
 
   if (search) {
-    filterStagesMap.all = { $match: { creator: new ObjectId(userId), $text: { $search: search } } };
-    filterStagesMap.favorites = {
-      $match: { creator: new ObjectId(userId), likes: userId, $text: { $search: search } },
-    };
-    filterStagesMap.shared = { $match: { creator: new ObjectId(userId), shared: true, $text: { $search: search } } };
+    filterStagesMap.all = { $match: { creator: userObjectId, $text: { $search: search } } };
+    filterStagesMap.favorites = { $match: { creator: userObjectId, likes: userObjectId, $text: { $search: search } } };
+    filterStagesMap.shared = { $match: { creator: userObjectId, shared: true, $text: { $search: search } } };
   }
 
   const filterStage = filter ? filterStagesMap[filter] : filterStagesMap.all;
@@ -157,7 +155,9 @@ const getUserProfile = async (req, res, next) => {
       title: 1,
       image: 1,
       description: 1,
-      favorite: { $in: ['$likes', [userId]] },
+      createdAt: 1,
+      favorite: { $in: [userObjectId, '$likes'] },
+      likes: { $size: '$likes' },
     },
   };
   const sortStage = { $sort: { date: -1 } };
@@ -194,7 +194,7 @@ const getUserProfile = async (req, res, next) => {
 
     places = await Place.aggregate(pipeline);
   } catch (e) {
-    return next(new HttpError(e.message));
+    return next(new HttpError('Sorry, something went wrong, could not load user profile'));
   }
 
   totalPages = currentPlacesAmount?.places ? Math.ceil(currentPlacesAmount.places / elementsPerPage) : 1;

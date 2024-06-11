@@ -56,11 +56,7 @@ const checkPlaceUpdate = () => {
 };
 
 const checkPlaceCreate = () => {
-  const address = body('address', 'Address must not be empty and contain at least 5 characters')
-    .trim()
-    .not()
-    .isEmpty()
-    .isLength({ min: 5 });
+  const address = body('address', 'Address must not be empty').trim().not().isEmpty();
 
   const title = body('title', 'Title must not be empty and contain at least 3 characters')
     .trim()
