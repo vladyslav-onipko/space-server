@@ -43,7 +43,7 @@ const createPlace = async (req, res, next) => {
   try {
     coordinates = await getMapCoordinates(address);
   } catch (e) {
-    return next(new HttpError(e.message, e.code, e.errors));
+    return next(new HttpError(e.message, 422, { field: 'address', message: 'Enter the correct address' }));
   }
 
   const place = new Place({
@@ -204,14 +204,14 @@ const getPlace = async (req, res, next) => {
     [userScoreData] = await Place.aggregate([
       { $match: { creator: place.creator.id } },
       { $group: { _id: null, totalLikes: { $sum: { $size: '$likes' } }, totalPlaces: { $sum: 1 } } },
-      { $project: { _id: 0, totalPlaces: 1, rating: { $divide: ['$totalLikes', '$totalPlaces'] } } },
+      { $project: { _id: 0, totalPlaces: 1, rating: { $round: [{ $divide: ['$totalLikes', '$totalPlaces'] }, 1] } } },
     ]);
 
     topUserPlaces = await Place.find(
       { creator: place.creator.id, shared: true },
       { _id: 0, id: '$_id', title: 1, image: 1 }
     )
-      .sort({ likes: 1 })
+      .sort({ likes: -1 })
       .limit(limitTopPlaces);
   } catch (e) {
     return next(new HttpError('Sorry, something went wrong, could not load place'));
@@ -223,6 +223,60 @@ const getPlace = async (req, res, next) => {
     userPlacesAmount: userScoreData.totalPlaces,
     userRating: userScoreData.rating,
   });
+};
+
+const getPlaces = async (req, res, next) => {
+  const { user: userId, page, search } = req.query;
+
+  const currentPage = parseInt(page) || 1;
+  const elementsPerPage = 1;
+  const elementsToSkip = (currentPage - 1) * elementsPerPage;
+
+  const userObjectId = userId ? new ObjectId(userId) : null;
+
+  let places, totalPlaces;
+
+  const piplineStages = {
+    match: { $match: { shared: true } },
+    project: {
+      $project: {
+        _id: 0,
+        id: '$_id',
+        title: 1,
+        image: 1,
+        description: 1,
+        createdAt: 1,
+        favorite: { $in: [userObjectId, '$likes'] },
+        likes: { $size: '$likes' },
+      },
+    },
+    sort: { $sort: { createdAt: -1 } },
+    skip: { $skip: elementsToSkip },
+    limit: { $limit: elementsPerPage },
+  };
+
+  if (search) {
+    piplineStages.match = { $match: { shared: true, $text: { $search: search } } };
+  }
+
+  try {
+    places = await Place.aggregate([
+      piplineStages.match,
+      piplineStages.project,
+      piplineStages.sort,
+      piplineStages.skip,
+      piplineStages.limit,
+    ]);
+
+    totalPlaces = await Place.find({ shared: true }).countDocuments();
+  } catch (e) {
+    return next(new HttpError('Sorry, something went wrong, could not load places'));
+  }
+
+  const totalPages = totalPlaces ? Math.ceil(totalPlaces / elementsPerPage) : 1;
+  const hasNextPage = currentPage < totalPages;
+
+  res.status(200).json({ places, totalPlaces, nextPage: currentPage + 1, hasNextPage });
 };
 
 const likePlace = async (req, res, next) => {
@@ -333,5 +387,6 @@ const deletePlace = async (req, res, next) => {
 module.exports.createPlace = createPlace;
 module.exports.editPlace = editPlace;
 module.exports.getPlace = getPlace;
+module.exports.getPlaces = getPlaces;
 module.exports.deletePlace = deletePlace;
 module.exports.likePlace = likePlace;

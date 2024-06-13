@@ -127,7 +127,7 @@ const getUserProfile = async (req, res, next) => {
   const { id: userId } = req.params;
   const { filter, search, page } = req.query;
 
-  const currentPage = +page || 1;
+  const currentPage = parseInt(page) || 1;
   const elementsPerPage = 3;
   const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
@@ -160,13 +160,13 @@ const getUserProfile = async (req, res, next) => {
       likes: { $size: '$likes' },
     },
   };
-  const sortStage = { $sort: { date: -1 } };
+  const sortStage = { $sort: { createdAt: -1 } };
   const skipStage = { $skip: elementsToSkip };
   const limitStage = { $limit: elementsPerPage };
 
   const pipeline = [filterStage, projectStage, sortStage, skipStage, limitStage];
 
-  let user, places, placesAmount, favoritesAmount, sharedAmount, currentPlacesAmount, totalPages, hasNextPage;
+  let user, places, placesAmount, favoritesAmount, sharedAmount, currentPlacesAmount;
 
   try {
     user = await User.findById(userId);
@@ -197,8 +197,8 @@ const getUserProfile = async (req, res, next) => {
     return next(new HttpError('Sorry, something went wrong, could not load user profile'));
   }
 
-  totalPages = currentPlacesAmount?.places ? Math.ceil(currentPlacesAmount.places / elementsPerPage) : 1;
-  hasNextPage = currentPage < totalPages;
+  const totalPages = currentPlacesAmount?.places ? Math.ceil(currentPlacesAmount.places / elementsPerPage) : 1;
+  const hasNextPage = currentPage < totalPages;
 
   res.status(200).json({
     places,

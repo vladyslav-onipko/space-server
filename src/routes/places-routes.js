@@ -1,11 +1,21 @@
 const { Router } = require('express');
 
-const { createPlace, getPlace, editPlace, deletePlace, likePlace } = require('../controllers/places-controllers');
+const {
+  createPlace,
+  getPlace,
+  getPlaces,
+  editPlace,
+  deletePlace,
+  likePlace,
+} = require('../controllers/places-controllers');
 const checkAuth = require('../middleware/check-auth');
 const { checkPlaceUpdate, checkPlaceCreate } = require('../middleware/input-validation');
 const { imageUpload } = require('../middleware/image-upload');
 
 const router = Router();
+
+// Get all users places route
+router.get('/', getPlaces);
 
 // Get place route
 router.get('/:id', getPlace);
