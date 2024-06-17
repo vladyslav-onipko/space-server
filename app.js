@@ -7,7 +7,7 @@ const { connect } = require('mongoose');
 const { httpError, notFoundError } = require('./src/middleware/http-error');
 const responseHeaders = require('./src/middleware/response-headers');
 const userRoutes = require('./src/routes/users-routes');
-const placesRoutes = require('./src/routes/places-routes');
+const placeRoutes = require('./src/routes/places-routes');
 
 const app = express();
 
@@ -24,7 +24,7 @@ app.use('/src/uploads/images', express.static(path.join(__dirname, 'src', 'uploa
 app.use('/api/users', userRoutes);
 
 // registering place routes
-app.use('/api/places', placesRoutes);
+app.use('/api/places', placeRoutes);
 
 // registering a 404 error handling if any of the routes above don't work
 app.use(notFoundError);

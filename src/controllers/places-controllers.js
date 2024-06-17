@@ -69,14 +69,7 @@ const createPlace = async (req, res, next) => {
     return next(new HttpError('Sorry, something went wrong, could not create place'));
   }
 
-  res.status(201).json({
-    message: 'Place successfully created',
-    place: {
-      ...place._doc,
-      id: place.id,
-      likes: place.likes.length,
-    },
-  });
+  res.status(201).json({ message: 'Place successfully created' });
 };
 
 const editPlace = async (req, res, next) => {
@@ -147,14 +140,7 @@ const editPlace = async (req, res, next) => {
     return next(new HttpError('Sorry, something went wrong, could not update place'));
   }
 
-  res.status(201).json({
-    message: successMessage,
-    place: {
-      ...place._doc,
-      id: place.id,
-      likes: place.likes.length,
-    },
-  });
+  res.status(201).json({ message: successMessage });
 };
 
 const getPlace = async (req, res, next) => {
@@ -207,12 +193,21 @@ const getPlace = async (req, res, next) => {
       { $project: { _id: 0, totalPlaces: 1, rating: { $round: [{ $divide: ['$totalLikes', '$totalPlaces'] }, 1] } } },
     ]);
 
-    topUserPlaces = await Place.find(
-      { creator: place.creator.id, shared: true },
-      { _id: 0, id: '$_id', title: 1, image: 1 }
-    )
-      .sort({ likes: -1 })
-      .limit(limitTopPlaces);
+    topUserPlaces = await Place.aggregate([
+      { $match: { creator: place.creator.id, shared: true } },
+      {
+        $project: {
+          _id: 0,
+          id: '$_id',
+          title: 1,
+          image: 1,
+          likes: { $size: '$likes' },
+        },
+      },
+      { $match: { likes: { $gt: 0 } } },
+      { $sort: { likes: -1 } },
+      { $limit: limitTopPlaces },
+    ]);
   } catch (e) {
     return next(new HttpError('Sorry, something went wrong, could not load place'));
   }
@@ -226,57 +221,86 @@ const getPlace = async (req, res, next) => {
 };
 
 const getPlaces = async (req, res, next) => {
-  const { user: userId, page, search } = req.query;
+  const { user: userId, page, search, top: topPlaces } = req.query;
 
-  const currentPage = parseInt(page) || 1;
-  const elementsPerPage = 1;
-  const elementsToSkip = (currentPage - 1) * elementsPerPage;
-
+  const limitTopPlaces = parseInt(topPlaces);
   const userObjectId = userId ? new ObjectId(userId) : null;
 
-  let places, totalPlaces;
+  if (topPlaces) {
+    let places;
 
-  const piplineStages = {
-    match: { $match: { shared: true } },
-    project: {
-      $project: {
-        _id: 0,
-        id: '$_id',
-        title: 1,
-        image: 1,
-        description: 1,
-        createdAt: 1,
-        favorite: { $in: [userObjectId, '$likes'] },
-        likes: { $size: '$likes' },
+    try {
+      places = await Place.aggregate([
+        { $match: { shared: true } },
+        {
+          $project: {
+            _id: 0,
+            id: '$_id',
+            title: 1,
+            image: 1,
+            description: 1,
+            favorite: { $in: [userObjectId, '$likes'] },
+            likes: { $size: '$likes' },
+          },
+        },
+        { $match: { likes: { $gt: 0 } } },
+        { $sort: { likes: -1 } },
+        { $limit: limitTopPlaces },
+      ]);
+    } catch (e) {
+      return next(new HttpError('Sorry, something went wrong, could not load places'));
+    }
+
+    res.status(200).json({ places });
+  } else {
+    const currentPage = parseInt(page) || 1;
+    const elementsPerPage = 1;
+    const elementsToSkip = (currentPage - 1) * elementsPerPage;
+
+    let places, totalPlaces;
+
+    const piplineStages = {
+      match: { $match: { shared: true } },
+      project: {
+        $project: {
+          _id: 0,
+          id: '$_id',
+          title: 1,
+          image: 1,
+          description: 1,
+          createdAt: 1,
+          favorite: { $in: [userObjectId, '$likes'] },
+          likes: { $size: '$likes' },
+        },
       },
-    },
-    sort: { $sort: { createdAt: -1 } },
-    skip: { $skip: elementsToSkip },
-    limit: { $limit: elementsPerPage },
-  };
+      sort: { $sort: { createdAt: -1 } },
+      skip: { $skip: elementsToSkip },
+      limit: { $limit: elementsPerPage },
+    };
 
-  if (search) {
-    piplineStages.match = { $match: { shared: true, $text: { $search: search } } };
+    if (search) {
+      piplineStages.match = { $match: { shared: true, $text: { $search: search } } };
+    }
+
+    try {
+      places = await Place.aggregate([
+        piplineStages.match,
+        piplineStages.project,
+        piplineStages.sort,
+        piplineStages.skip,
+        piplineStages.limit,
+      ]);
+
+      totalPlaces = await Place.find({ shared: true }).countDocuments();
+    } catch (e) {
+      return next(new HttpError('Sorry, something went wrong, could not load places'));
+    }
+
+    const totalPages = totalPlaces ? Math.ceil(totalPlaces / elementsPerPage) : 1;
+    const hasNextPage = currentPage < totalPages;
+
+    res.status(200).json({ places, totalPlaces, nextPage: currentPage + 1, hasNextPage });
   }
-
-  try {
-    places = await Place.aggregate([
-      piplineStages.match,
-      piplineStages.project,
-      piplineStages.sort,
-      piplineStages.skip,
-      piplineStages.limit,
-    ]);
-
-    totalPlaces = await Place.find({ shared: true }).countDocuments();
-  } catch (e) {
-    return next(new HttpError('Sorry, something went wrong, could not load places'));
-  }
-
-  const totalPages = totalPlaces ? Math.ceil(totalPlaces / elementsPerPage) : 1;
-  const hasNextPage = currentPage < totalPages;
-
-  res.status(200).json({ places, totalPlaces, nextPage: currentPage + 1, hasNextPage });
 };
 
 const likePlace = async (req, res, next) => {
@@ -342,7 +366,7 @@ const deletePlace = async (req, res, next) => {
 
   try {
     if (!place) {
-      throw new HttpError('Could not find a user created the place', 404);
+      throw new HttpError('Could not find a place with provided id', 404);
     }
   } catch (e) {
     return next(new HttpError(e.message, e.code));
@@ -379,9 +403,7 @@ const deletePlace = async (req, res, next) => {
     return next(new HttpError('Sorry, something went wrong, could not delete the place'));
   }
 
-  res.status(200).json({
-    message: 'Place successfully deleted',
-  });
+  res.status(200).json({ message: 'Place successfully deleted' });
 };
 
 module.exports.createPlace = createPlace;
