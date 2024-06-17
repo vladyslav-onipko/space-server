@@ -221,12 +221,13 @@ const getPlace = async (req, res, next) => {
 };
 
 const getPlaces = async (req, res, next) => {
-  const { user: userId, page, search, top: topPlaces } = req.query;
+  const { user: sessionUser, creator, page, search, filter, top: topPlaces } = req.query;
 
-  const limitTopPlaces = parseInt(topPlaces);
-  const userObjectId = userId ? new ObjectId(userId) : null;
+  const sessionUserId = sessionUser ? new ObjectId(sessionUser) : null;
+  const creatorId = creator ? new ObjectId(creator) : null;
 
   if (topPlaces) {
+    const limitTopPlaces = parseInt(topPlaces);
     let places;
 
     try {
@@ -239,7 +240,7 @@ const getPlaces = async (req, res, next) => {
             title: 1,
             image: 1,
             description: 1,
-            favorite: { $in: [userObjectId, '$likes'] },
+            favorite: { $in: [sessionUserId, '$likes'] },
             likes: { $size: '$likes' },
           },
         },
@@ -257,78 +258,79 @@ const getPlaces = async (req, res, next) => {
     const elementsPerPage = 1;
     const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
-    let places, totalPlaces;
-
-    const piplineStages = {
-      match: { $match: { shared: true } },
-      project: {
-        $project: {
-          _id: 0,
-          id: '$_id',
-          title: 1,
-          image: 1,
-          description: 1,
-          createdAt: 1,
-          favorite: { $in: [userObjectId, '$likes'] },
-          likes: { $size: '$likes' },
-        },
-      },
-      sort: { $sort: { createdAt: -1 } },
-      skip: { $skip: elementsToSkip },
-      limit: { $limit: elementsPerPage },
+    const filterStagesMap = {
+      all: { $match: { shared: true } },
+      user: { $match: { shared: true, creator: creatorId } },
     };
 
+    let places, placesAmount;
+
     if (search) {
-      piplineStages.match = { $match: { shared: true, $text: { $search: search } } };
+      filterStagesMap.all = { $match: { shared: true, $text: { $search: search } } };
+      filterStagesMap.user = { $match: { shared: true, creator: creatorId, $text: { $search: search } } };
     }
 
-    try {
-      places = await Place.aggregate([
-        piplineStages.match,
-        piplineStages.project,
-        piplineStages.sort,
-        piplineStages.skip,
-        piplineStages.limit,
-      ]);
+    const filterStage = filter ? filterStagesMap[filter] : filterStagesMap.all;
+    const projectStage = {
+      $project: {
+        _id: 0,
+        id: '$_id',
+        title: 1,
+        image: 1,
+        description: 1,
+        createdAt: 1,
+        favorite: { $in: [sessionUserId, '$likes'] },
+        likes: { $size: '$likes' },
+      },
+    };
+    const sortStage = { $sort: { createdAt: -1 } };
+    const skipStage = { $skip: elementsToSkip };
+    const limitStage = { $limit: elementsPerPage };
 
-      totalPlaces = await Place.find({ shared: true }).countDocuments();
+    const pipeline = [filterStage, projectStage, sortStage, skipStage, limitStage];
+
+    try {
+      places = await Place.aggregate(pipeline);
+
+      [placesAmount] = await Place.aggregate([filterStage]).count('places');
     } catch (e) {
       return next(new HttpError('Sorry, something went wrong, could not load places'));
     }
 
-    const totalPages = totalPlaces ? Math.ceil(totalPlaces / elementsPerPage) : 1;
+    const totalPages = placesAmount?.places ? Math.ceil(placesAmount.places / elementsPerPage) : 1;
     const hasNextPage = currentPage < totalPages;
 
-    res.status(200).json({ places, totalPlaces, nextPage: currentPage + 1, hasNextPage });
+    res.status(200).json({ places, placesAmount: placesAmount?.places, nextPage: currentPage + 1, hasNextPage });
   }
 };
 
 const likePlace = async (req, res, next) => {
   const { id: placeId } = req.params;
-  const { like, userId } = req.query;
+  const { userId } = req.query;
 
-  const likeValue = like ? like === 'true' : like;
+  const userObjectId = userId ? new ObjectId(userId) : null;
+  const placeObjectId = placeId ? new ObjectId(placeId) : null;
 
   let user, place;
 
   try {
     user = await User.findById(userId);
   } catch (e) {
-    return next(new HttpError('Sorry, something went wrong, could not like place'));
+    return next(new HttpError('Sorry, something went wrong, could not like the place'));
   }
 
   try {
     if (!user) {
-      throw new HttpError('Sorry, user is not registered');
+      throw new HttpError('Sorry, could not find a user with provided id', 404);
     }
   } catch (e) {
-    return next(new HttpError(e.message));
+    return next(new HttpError(e.message, e.code));
   }
 
   try {
     place = await Place.findById(placeId);
   } catch (e) {
-    return next(new HttpError('Sorry, something went wrong, could not like place'));
+    return next(new HttpError('Sorry, something went wrong, could not like the place'));
   }
 
   try {
@@ -340,14 +342,33 @@ const likePlace = async (req, res, next) => {
   }
 
   try {
-    if (likeValue) {
-      place.likes.push(user);
-    } else {
-      place.likes.pull(user);
-    }
-    await place.save();
+    const [updatedPlace] = await Place.aggregate([
+      { $match: { _id: placeObjectId } },
+      {
+        $addFields: {
+          likes: {
+            $cond: {
+              if: { $in: [userObjectId, '$likes'] },
+              then: { $filter: { input: '$likes', as: 'userId', cond: { $ne: ['$$userId', userObjectId] } } },
+              else: {
+                $concatArrays: ['$likes', [userObjectId]],
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    await Place.bulkWrite([
+      {
+        updateOne: {
+          filter: { _id: updatedPlace._id },
+          update: { likes: updatedPlace.likes },
+        },
+      },
+    ]);
   } catch (e) {
-    return next(new HttpError('Sorry, something went wrong, could not like place'));
+    return next(new HttpError('Sorry, something went wrong, could not like the place'));
   }
 
   res.status(201).json({ message: 'Place successfully updated' });

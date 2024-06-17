@@ -1,6 +1,8 @@
 const fs = require('fs');
 
-const { Types } = require('mongoose');
+const {
+  Types: { ObjectId },
+} = require('mongoose');
 const { validationResult } = require('express-validator');
 const { hash, compare } = require('bcryptjs');
 const { sign } = require('jsonwebtoken');
@@ -131,7 +133,7 @@ const getUserProfile = async (req, res, next) => {
   const elementsPerPage = 3;
   const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
-  const userObjectId = new Types.ObjectId(userId);
+  const userObjectId = new ObjectId(userId);
 
   const defaultFilterStagesMap = {
     all: { $match: { creator: userObjectId } },
