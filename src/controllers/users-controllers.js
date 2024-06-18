@@ -263,7 +263,45 @@ const userUpdateProfile = async (req, res, next) => {
   });
 };
 
+const getUsers = async (req, res, next) => {
+  const { max } = req.query;
+
+  const limitUsers = max ? parseInt(max) : Number.MAX_SAFE_INTEGER;
+  let users;
+
+  try {
+    users = await User.aggregate([
+      { $lookup: { from: 'places', localField: 'places', foreignField: '_id', as: 'place' } },
+      { $unwind: '$place' },
+      {
+        $group: {
+          _id: { id: '$_id', name: '$name', image: '$image' },
+          totalLikes: { $sum: { $size: '$place.likes' } },
+          totalPlaces: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          id: '$_id.id',
+          name: '$_id.name',
+          image: '$_id.image',
+          rating: { $round: [{ $divide: ['$totalLikes', '$totalPlaces'] }, 1] },
+        },
+      },
+      { $match: { rating: { $gt: 0 } } },
+      { $sort: { rating: -1 } },
+      { $limit: limitUsers },
+    ]);
+  } catch (e) {
+    return next(new HttpError('Something went wrong, could not load users'));
+  }
+
+  res.status(200).json({ users });
+};
+
 module.exports.userSignup = userSignup;
 module.exports.userSignin = userSignin;
 module.exports.getUserProfile = getUserProfile;
 module.exports.userUpdateProfile = userUpdateProfile;
+module.exports.getUsers = getUsers;

@@ -1,11 +1,20 @@
 const { Router } = require('express');
 
-const { userSignup, userSignin, getUserProfile, userUpdateProfile } = require('../controllers/users-controllers');
+const {
+  userSignup,
+  userSignin,
+  getUserProfile,
+  getUsers,
+  userUpdateProfile,
+} = require('../controllers/users-controllers');
 const { checkUserSignup, checkUserUpdate } = require('../middleware/input-validation');
 const { imageUpload } = require('../middleware/image-upload');
 const checkAuth = require('../middleware/check-auth');
 
 const router = Router();
+
+// Get users route
+router.get('/', getUsers);
 
 // User update profile route
 router.patch('/:id', checkAuth, imageUpload('users'), checkUserUpdate(), userUpdateProfile);
