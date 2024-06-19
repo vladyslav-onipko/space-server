@@ -255,7 +255,7 @@ const getPlaces = async (req, res, next) => {
     res.status(200).json({ places });
   } else {
     const currentPage = parseInt(page) || 1;
-    const elementsPerPage = 1;
+    const elementsPerPage = 6;
     const elementsToSkip = (currentPage - 1) * elementsPerPage;
 
     const filterStagesMap = {
