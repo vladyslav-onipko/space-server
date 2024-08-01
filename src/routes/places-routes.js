@@ -21,7 +21,7 @@ router.get('/', getPlaces);
 router.get('/:id', getPlace);
 
 // Edit place route
-router.patch('/:id', checkAuth, imageUpload('places'), checkPlaceUpdate(), editPlace);
+router.patch('/:id', checkAuth, imageUpload(), checkPlaceUpdate(), editPlace);
 
 // Delete place route
 router.delete('/:id', checkAuth, deletePlace);
@@ -30,6 +30,6 @@ router.delete('/:id', checkAuth, deletePlace);
 router.patch('/:id/favorite', likePlace);
 
 // Create new place route
-router.post('/', checkAuth, imageUpload('places'), checkPlaceCreate(), createPlace);
+router.post('/', checkAuth, imageUpload(), checkPlaceCreate(), createPlace);
 
 module.exports = router;

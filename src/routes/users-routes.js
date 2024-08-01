@@ -17,13 +17,13 @@ const router = Router();
 router.get('/', getUsers);
 
 // User update profile route
-router.patch('/:id', checkAuth, imageUpload('users'), checkUserUpdate(), userUpdateProfile);
+router.patch('/:id', checkAuth, imageUpload(), checkUserUpdate(), userUpdateProfile);
 
 // User get profile route
 router.get('/:id', checkAuth, getUserProfile);
 
 // User signup router
-router.post('/signup', imageUpload('users'), checkUserSignup(), userSignup);
+router.post('/signup', imageUpload(), checkUserSignup(), userSignup);
 
 // User login router
 router.post('/signin', userSignin);

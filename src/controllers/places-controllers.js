@@ -1,12 +1,10 @@
-const fs = require('fs');
-
 const {
   startSession,
   Types: { ObjectId },
 } = require('mongoose');
 const { validationResult } = require('express-validator');
 
-const { validateImageFile, validateInputs, getMapCoordinates } = require('../utils/helpers');
+const { saveImage, validateInputs, getMapCoordinates } = require('../utils/helpers');
 const HttpError = require('../models/http-error');
 const User = require('../models/user');
 const Place = require('../models/place');
@@ -14,11 +12,10 @@ const Place = require('../models/place');
 const createPlace = async (req, res, next) => {
   const { address, title, description, creator, shared } = req.body;
   const errors = validationResult(req);
-
   const sharedValue = shared ? shared === 'true' : shared;
 
   validateInputs(errors, next);
-  validateImageFile(req.file, next);
+  await saveImage(req.file, 'places', next);
 
   let user, coordinates;
 
@@ -83,7 +80,7 @@ const editPlace = async (req, res, next) => {
     const errors = validationResult(req);
 
     validateInputs(errors, next);
-    validateImageFile(req.file, next);
+    await saveImage(req.file, 'places', next);
   }
 
   let place, user;
@@ -128,8 +125,6 @@ const editPlace = async (req, res, next) => {
         ? 'You have successfully share the place'
         : 'You have successfully unshare the place';
     } else {
-      fs.unlink(place.image, () => {}); // remove old image
-
       place.title = title;
       place.description = description;
       place.image = req.file.path;
@@ -419,7 +414,6 @@ const deletePlace = async (req, res, next) => {
     user.places.pull(place);
     await user.save({ session });
     await session.commitTransaction();
-    fs.unlink(place.image, () => {});
   } catch (e) {
     return next(new HttpError('Sorry, something went wrong, could not delete the place'));
   }

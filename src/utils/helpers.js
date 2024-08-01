@@ -1,6 +1,7 @@
 const axios = require('axios');
 
 const HttpError = require('../models/http-error');
+const { uploadImageToCloudinary } = require('../lib/cloudinary');
 
 /**
  * Transform array of objects to a smaller array of objects with required fields.
@@ -28,7 +29,7 @@ const convertHoursToMilliseconds = (hours) => {
  * @param {Function} next - default next route fn
  * @returns {Error} return error if not file found
  */
-const validateImageFile = (file, next) => {
+const saveImage = async (file, folder, next) => {
   if (!file) {
     const error = new HttpError('Provided file is incorrect or missing', 422, {
       field: 'image',
@@ -36,8 +37,12 @@ const validateImageFile = (file, next) => {
     });
 
     return next(error);
-  } else {
-    file.path = file.path.replace(/\\/g, '/');
+  }
+
+  try {
+    file.path = await uploadImageToCloudinary(file, folder);
+  } catch (e) {
+    return next(new HttpError('Failed to save image. Please try again later'));
   }
 };
 
@@ -84,6 +89,6 @@ const getMapCoordinates = async (address) => {
 
 module.exports.collectInputErrors = collectInputErrors;
 module.exports.convertHoursToMilliseconds = convertHoursToMilliseconds;
-module.exports.validateImageFile = validateImageFile;
+module.exports.saveImage = saveImage;
 module.exports.validateInputs = validateInputs;
 module.exports.getMapCoordinates = getMapCoordinates;

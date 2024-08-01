@@ -11,11 +11,6 @@ const HttpError = require('../models/http-error');
  * @returns response with error message, error code and error data
  */
 const httpError = (error, req, res, next) => {
-  // roll back file if any error occurred
-  if (req.file) {
-    const filePath = req.file.path.replace(/\\/g, '/');
-    fs.unlink(filePath, () => {});
-  }
   // checking if response has already been sent
   if (res.headerSent) {
     return next(error);

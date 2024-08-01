@@ -1,5 +1,3 @@
-const fs = require('fs');
-
 const {
   Types: { ObjectId },
 } = require('mongoose');
@@ -8,7 +6,7 @@ const { hash, compare } = require('bcryptjs');
 const { sign } = require('jsonwebtoken');
 
 const HttpError = require('../models/http-error');
-const { convertHoursToMilliseconds, validateImageFile, validateInputs } = require('../utils/helpers');
+const { convertHoursToMilliseconds, saveImage, validateInputs } = require('../utils/helpers');
 
 const User = require('../models/user');
 const Place = require('../models/place');
@@ -18,7 +16,7 @@ const userSignup = async (req, res, next) => {
   const errors = validationResult(req);
 
   validateInputs(errors, next);
-  validateImageFile(req.file);
+  await saveImage(req.file, 'users', next);
 
   let user, createdUser, token;
 
@@ -220,7 +218,7 @@ const userUpdateProfile = async (req, res, next) => {
   const errors = validationResult(req);
 
   validateInputs(errors, next);
-  validateImageFile(req.file);
+  await saveImage(req.file, 'users', next);
 
   let user;
 
@@ -243,8 +241,6 @@ const userUpdateProfile = async (req, res, next) => {
   }
 
   try {
-    fs.unlink(user.image, () => {}); // remove old image
-
     user.name = name;
     user.image = req.file.path;
 
