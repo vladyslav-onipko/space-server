@@ -10,7 +10,6 @@ const {
 } = require('../controllers/places-controllers');
 const checkAuth = require('../middleware/check-auth');
 const { checkPlaceUpdate, checkPlaceCreate } = require('../middleware/input-validation');
-const { imageUpload } = require('../middleware/image-upload');
 
 const router = Router();
 
@@ -21,7 +20,7 @@ router.get('/', getPlaces);
 router.get('/:id', getPlace);
 
 // Edit place route
-router.patch('/:id', checkAuth, imageUpload(), checkPlaceUpdate(), editPlace);
+router.patch('/:id', checkAuth, checkPlaceUpdate(), editPlace);
 
 // Delete place route
 router.delete('/:id', checkAuth, deletePlace);
@@ -30,6 +29,6 @@ router.delete('/:id', checkAuth, deletePlace);
 router.patch('/:id/favorite', likePlace);
 
 // Create new place route
-router.post('/', checkAuth, imageUpload(), checkPlaceCreate(), createPlace);
+router.post('/', checkAuth, checkPlaceCreate(), createPlace);
 
 module.exports = router;

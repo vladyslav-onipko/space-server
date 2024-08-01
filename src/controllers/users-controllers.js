@@ -6,17 +6,16 @@ const { hash, compare } = require('bcryptjs');
 const { sign } = require('jsonwebtoken');
 
 const HttpError = require('../models/http-error');
-const { convertHoursToMilliseconds, saveImage, validateInputs } = require('../utils/helpers');
+const { convertHoursToMilliseconds, validateInputs } = require('../utils/helpers');
 
 const User = require('../models/user');
 const Place = require('../models/place');
 
 const userSignup = async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, image } = req.body;
   const errors = validationResult(req);
 
   validateInputs(errors, next);
-  await saveImage(req.file, 'users', next);
 
   let user, createdUser, token;
 
@@ -42,7 +41,7 @@ const userSignup = async (req, res, next) => {
     createdUser = new User({
       name,
       email,
-      image: req.file.path,
+      image,
       password: hashedPassword,
       places: [],
     });
@@ -213,12 +212,11 @@ const getUserProfile = async (req, res, next) => {
 };
 
 const userUpdateProfile = async (req, res, next) => {
-  const { name } = req.body;
+  const { name, image } = req.body;
   const { id: userId } = req.params;
   const errors = validationResult(req);
 
   validateInputs(errors, next);
-  await saveImage(req.file, 'users', next);
 
   let user;
 
@@ -242,7 +240,7 @@ const userUpdateProfile = async (req, res, next) => {
 
   try {
     user.name = name;
-    user.image = req.file.path;
+    user.image = image;
 
     await user.save();
   } catch (e) {

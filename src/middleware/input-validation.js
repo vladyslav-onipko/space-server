@@ -19,7 +19,9 @@ const checkUserSignup = () => {
     .isEmpty()
     .isLength({ min: 6 });
 
-  return [name, email, password];
+  const image = body('image', 'Image must not be empty').trim().not().isEmpty();
+
+  return [name, email, password, image];
 };
 
 /**
@@ -33,7 +35,9 @@ const checkUserUpdate = () => {
     .isEmpty()
     .isLength({ min: 3 });
 
-  return [name];
+  const image = body('image', 'Image must not be empty').trim().not().isEmpty();
+
+  return [name, image];
 };
 
 const checkPlaceUpdate = () => {
@@ -52,7 +56,9 @@ const checkPlaceUpdate = () => {
     .isEmpty()
     .isLength({ min: 3, max: 200 });
 
-  return [title, description];
+  const image = body('image', 'Image must not be empty').trim().not().isEmpty();
+
+  return [title, description, image];
 };
 
 const checkPlaceCreate = () => {
@@ -73,7 +79,9 @@ const checkPlaceCreate = () => {
     .isEmpty()
     .isLength({ min: 3, max: 200 });
 
-  return [address, title, description];
+  const image = body('image', 'Image must not be empty').trim().not().isEmpty();
+
+  return [address, title, description, image];
 };
 
 module.exports.checkUserSignup = checkUserSignup;

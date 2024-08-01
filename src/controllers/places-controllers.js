@@ -4,18 +4,17 @@ const {
 } = require('mongoose');
 const { validationResult } = require('express-validator');
 
-const { saveImage, validateInputs, getMapCoordinates } = require('../utils/helpers');
+const { validateInputs, getMapCoordinates } = require('../utils/helpers');
 const HttpError = require('../models/http-error');
 const User = require('../models/user');
 const Place = require('../models/place');
 
 const createPlace = async (req, res, next) => {
-  const { address, title, description, creator, shared } = req.body;
+  const { address, title, description, image, creator, shared } = req.body;
   const errors = validationResult(req);
   const sharedValue = shared ? shared === 'true' : shared;
 
   validateInputs(errors, next);
-  await saveImage(req.file, 'places', next);
 
   let user, coordinates;
 
@@ -48,7 +47,7 @@ const createPlace = async (req, res, next) => {
     location: coordinates,
     title,
     description,
-    image: req.file.path,
+    image,
     creator,
     likes: [],
     shared: sharedValue,
@@ -70,7 +69,7 @@ const createPlace = async (req, res, next) => {
 };
 
 const editPlace = async (req, res, next) => {
-  const { title, description } = req.body;
+  const { title, description, image } = req.body;
   const { id: placeId } = req.params;
   const { shared } = req.query;
 
@@ -78,9 +77,7 @@ const editPlace = async (req, res, next) => {
 
   if (sharedValue === undefined) {
     const errors = validationResult(req);
-
     validateInputs(errors, next);
-    await saveImage(req.file, 'places', next);
   }
 
   let place, user;
@@ -127,7 +124,7 @@ const editPlace = async (req, res, next) => {
     } else {
       place.title = title;
       place.description = description;
-      place.image = req.file.path;
+      place.image = image;
     }
 
     await place.save();
